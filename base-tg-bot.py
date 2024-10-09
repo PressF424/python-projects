@@ -1,4 +1,5 @@
 import logging
+import re  # хуйня ты ебанная чтоб тебя медведь сьел
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -14,8 +15,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("Рестарт", callback_data='restart')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Привет! Введите Steam ID пользователя, чтобы получить информацию о профиле.',
+    await update.message.reply_text('Привет! Введите ссылку на Steam профиль, чтобы получить информацию о пользователе.',
                                     reply_markup=reply_markup)
+
+
+def extract_steam_id(profile_url: str) -> str:
+    """Функция для извлечения Steam ID из ссылки на профиль."""
+    # Проверяем, содержит ли ссылка /profiles/ и затем извлекаем ID
+    match_profiles = re.search(r'steamcommunity\.com/profiles/(\d+)', profile_url)
+    if match_profiles:
+        return match_profiles.group(1)
+
+    # Проверяем, содержит ли ссылка /id/ и затем извлекаем кастомный URL
+    match_id = re.search(r'steamcommunity\.com/id/([\w\d]+)', profile_url)
+    if match_id:
+        return match_id.group(1)
+
+    return None
 
 
 async def get_player_info(steam_id: str) -> dict:
@@ -31,7 +47,6 @@ async def get_player_info(steam_id: str) -> dict:
     else:
         return None
 
-
 async def get_recently_played_games(steam_id: str) -> list:
     url = f"http://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v0001/?key={STEAM_API_KEY}&steamid={steam_id}&count=5"
     response = requests.get(url)
@@ -39,6 +54,23 @@ async def get_recently_played_games(steam_id: str) -> list:
         return response.json().get('response', {}).get('games', [])
     else:
         return []
+
+
+async def resolve_vanity_url(vanity_url: str) -> str:
+    """Преобразование кастомного URL в Steam ID с помощью API."""
+    url = f"http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key={STEAM_API_KEY}&vanityurl={vanity_url}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        result = response.json().get('response', {})
+        if result.get('success') == 1:
+            return result.get('steamid')
+        else:
+            return None
+    else:
+        return None
+
+
 def escape_markdown(text: str) -> str:
     """Экранирование специальных символов для MarkdownV2."""
     return (
@@ -70,17 +102,6 @@ async def get_steam_level(steam_id: str) -> int:
         return 0
 
 def convert_playtime(minutes: int) -> str:
-    if minutes == 0:
-        return "0 ч"
-    hours = minutes // 60
-    remaining_minutes = minutes % 60
-    if hours > 0:
-        return f"{hours} ч {remaining_minutes} мин"
-    else:
-        return f"{remaining_minutes} мин"
-
-
-def convert_playtime(minutes: int) -> str:
     """Конвертация времени из минут в формат 'часы минуты'."""
     if minutes == 0:
         return "0 ч"
@@ -92,57 +113,72 @@ def convert_playtime(minutes: int) -> str:
         return f"{remaining_minutes} мин"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    steam_id = update.message.text.strip()
-    player_info = await get_player_info(steam_id)
-    steam_level = await get_steam_level(steam_id)
+    # Получаем текст сообщения
+    profile_url = update.message.text.strip()
 
-    if player_info and 'steamid' in player_info:
-        recently_played_games = await get_recently_played_games(steam_id)
+    # Извлекаем Steam ID или кастомный URL
+    extracted_id = extract_steam_id(profile_url)
 
-        # конвертация времени для каждой игры
-        games_list = "\n".join([f"• {escape_markdown(game['name'])} (Время: {convert_playtime(game['playtime_forever'])})" for game in recently_played_games]) or "Нет недавно запущенных игр."
-
-        # исправленная проверка на корректность URL аватара
-        avatar_url = player_info.get('avatarfull')
-        if avatar_url and avatar_url.startswith(('http://', 'https://')):
-            avatar_display = f'<a href="{avatar_url}">Ссылка на аватар</a>'
-        else:
-            avatar_display = "Нет доступного аватара."
-
-        # все возможные статусы
-        personastate = player_info.get('personastate', 0)
-        status_map = {
-            0: "Не в сети",
-            1: "Онлайн",
-            2: "Нет на месте",
-            3: "Не беспокоить",
-            4: "В игре"
-        }
-        status = status_map.get(personastate, "Неизвестно")
-
-        profile_info = (
-            f"<b>Имя:</b> {escape_markdown(player_info.get('personaname', 'Не указано'))}\n"
-            f"<b>Уровень аккаунта:</b> {steam_level}\n"
-            f"<b>Статус:</b> {status}\n"
-            f"<b>Местоположение:</b> {escape_markdown(str(player_info.get('loccountrycode', 'Не указано')))}\n"
-            f"<b>Фото профиля:</b> {avatar_display}\n"
-            f"<b>Недавно запущенные игры:</b>\n{games_list}"
-        )
-
-        await update.message.reply_text(profile_info, parse_mode=ParseMode.HTML)
-
+    # Если это кастомный URL (в нем буквы), конвертируем его в Steam ID
+    if extracted_id and not extracted_id.isdigit():
+        steam_id = await resolve_vanity_url(extracted_id)
+        if not steam_id:
+            await update.message.reply_text('Не удалось найти Steam ID по кастомному URL. Проверьте корректность ссылки.')
+            return
     else:
-        await update.message.reply_text('Возможно вы ошибились. Пожалуйста, проверьте Steam ID.')
+        steam_id = extracted_id
 
+    if steam_id:
+        player_info = await get_player_info(steam_id)
+        steam_level = await get_steam_level(steam_id)
 
+        if player_info and 'steamid' in player_info:
+            recently_played_games = await get_recently_played_games(steam_id)
+
+            # Конвертация времени для каждой игры
+            games_list = "\n".join([f"• {escape_markdown(game['name'])} (Время: {convert_playtime(game['playtime_forever'])})" for game in recently_played_games]) or "Нет недавно запущенных игр."
+
+            # Проверка на корректность URL аватара
+            avatar_url = player_info.get('avatarfull')
+            if avatar_url and avatar_url.startswith(('http://', 'https://')):
+                avatar_display = f'<a href="{avatar_url}">Ссылка на аватар</a>'
+            else:
+                avatar_display = "Нет доступного аватара."
+
+            # Все возможные статусы
+            personastate = player_info.get('personastate', 0)
+            status_map = {
+                0: "Не в сети",
+                1: "Онлайн",
+                2: "Нет на месте",
+                3: "Не беспокоить",
+                4: "В игре"
+            }
+            status = status_map.get(personastate, "Неизвестно")
+
+            profile_info = (
+                f"<b>Имя:</b> {escape_markdown(player_info.get('personaname', 'Не указано'))}\n"
+                f"<b>Уровень аккаунта:</b> {steam_level}\n"
+                f"<b>Статус:</b> {status}\n"
+                f"<b>Фото профиля:</b> {avatar_display}\n"
+                f"<b>Недавно запущенные игры:</b>\n{games_list}"
+            )
+
+            await update.message.reply_text(profile_info, parse_mode=ParseMode.HTML)
+
+        else:
+            await update.message.reply_text('Не удалось получить данные по этому Steam ID. Пожалуйста, проверьте ссылку.')
+    else:
+        await update.message.reply_text('Пожалуйста, предоставьте корректную ссылку на Steam профиль.')
 
 
 async def handle_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text('Я вас не понимаю. Укажите свой действующий ID.')
+    await update.message.reply_text('Я вас не понимаю. Укажите действующую ссылку на Steam профиль.')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
