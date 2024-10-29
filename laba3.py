@@ -1,6 +1,4 @@
 # одиночка
-from torch.ao.nn.quantized.functional import clamp
-
 
 class Singleton:
     _instance = None
