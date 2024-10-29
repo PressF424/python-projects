@@ -8,12 +8,13 @@ class Singleton:
             clss._instance = super(Singleton, clss).__new__(clss)
         return clss._instance
 
-# Вызов
+# вызов
 s1 = Singleton()
 s2 = Singleton()
 print(s1 is s2)
 
 # фабричный
+
 class Transport:
     def create_transport(self):
         raise NotImplementedError()
@@ -35,7 +36,7 @@ class TransportFactory:
         else:
             return Bike().create_transport()
 
-# Использование
+# вызов
 print(TransportFactory.create_transport("vehicle"))
 print(TransportFactory.create_transport("bike"))
 
@@ -100,7 +101,7 @@ class HouseBuilder:
     def build(self):
         return self.house
 
-# Использование
+# вызов
 builder = HouseBuilder()
 house = builder.build_foundation().build_walls().build_roof().build()
 print(house.parts)

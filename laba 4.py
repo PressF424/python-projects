@@ -22,14 +22,14 @@ class Context:
     def do_some_logic(self, data):
         return self._strategy.execute(data)
 
-# Использование
+# вызов
 context = Context(ConcreteStrategyA())
 print(context.do_some_logic("входные данные"))
 
 context.set_strategy(ConcreteStrategyB())
 print(context.do_some_logic("входные данные"))
 
-# цепочка обязоностей
+# цепочка обязанностей
 
 class Handler:
     def set_next(self, handler):
@@ -55,7 +55,7 @@ class ConcreteHandlerB(Handler):
         else:
             return super().handle(request)
 
-# Использование
+# вызов
 handler_a = ConcreteHandlerA()
 handler_b = ConcreteHandlerB()
 
@@ -92,7 +92,7 @@ class Collection:
     def __iter__(self):
         return Iterator(self.items)
 
-# Использование
+# вызов
 collection = Collection()
 collection.add_item("Первый элемент")
 collection.add_item("ВТорой элемент")
