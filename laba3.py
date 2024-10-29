@@ -87,15 +87,15 @@ class HouseBuilder:
         self.house = House()
 
     def build_roof(self):
-        self.house.add_part("Крыша")
+        self.house.add_part("Крыша дома")
         return self
 
     def build_walls(self):
-        self.house.add_part("Стены")
+        self.house.add_part("Стены дома")
         return self
 
     def build_foundation(self):
-        self.house.add_part("Фундамент")
+        self.house.add_part("фундамент дома")
         return self
 
     def build(self):
