@@ -24,10 +24,10 @@ class Context:
 
 # вызов
 context = Context(ConcreteStrategyA())
-print(context.do_some_logic("входные данные"))
+print(context.do_some_logic("входные данные 1"))
 
 context.set_strategy(ConcreteStrategyB())
-print(context.do_some_logic("входные данные"))
+print(context.do_some_logic("входные данные 2"))
 
 # цепочка обязанностей
 
